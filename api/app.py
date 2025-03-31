@@ -1,35 +1,30 @@
-from multiprocessing import process
 import subprocess
-from flask import Flask, request, jsonify
 import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "workflow")))
+
+from flask import Flask, request, jsonify
 from workflow.question_matching import find_similar_question
 from workflow.file_process import unzip_folder
 from workflow.function_definations_llm import function_definitions_objects_llm
-from workflow.openai_api import extract_parameters
+from workflow.openai_api import  extract_parameters
 from workflow.solution_functions import functions_dict
-
-tmp_dir = "tmp_uploads"
-os.makedirs(tmp_dir, exist_ok=True)
 
 app = Flask(__name__)
 
 API_Key = os.getenv("API_Key")
 
-
-@app.route("/", methods=["POST"])
+@app.route("/api/", methods=["POST"])
 def process_file():
     question = request.form.get("question")
     file = request.files.get("file")  # Get the uploaded file (optional)
-    file_names = []
-
-    # Ensure tmp_dir is always assigned
-    tmp_dir = "tmp_uploads"
+    
     try:
         matched_function, matched_description = find_similar_question(question)
 
         if file:
             temp_dir, file_names = unzip_folder(file)
-            tmp_dir = temp_dir  # Update tmp_dir if a file is uploaded
         parameters = extract_parameters(
             str(question),
             function_definitions_llm=function_definitions_objects_llm[matched_function],
@@ -42,31 +37,10 @@ def process_file():
         if file:
             answer = solution_function(file, *parameters)
         else:
-            print(type(parameters), parameters)
             answer = solution_function(*parameters)
         return jsonify({"answer": answer})
     except Exception as e:
-        print(e,"this is the error")
         return jsonify({"error": str(e)}), 500
-
-
-# @app.route('/redeploy', methods=['GET'])
-# def redeploy():
-#     # Retrieve password from request parameters
-#     password = request.args.get('password')
-#
-#     # Kindly don't print sensitive credentials
-#     # print(password)  
-#     # print(API_Key)  
-#
-#     # Validate password before triggering redeployment
-#     if password != API_Key:
-#         return "Unauthorized", 403
-#
-#     # Execute redeployment script
-#     subprocess.run(["../redeploy.sh"], shell=True)
-#     return "Redeployment triggered!", 200
-
 
 @app.route('/redeploy', methods=['GET'])
 def redeploy():
@@ -74,4 +48,5 @@ def redeploy():
     return "Redeployment triggered!", 200
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
